@@ -56,3 +56,14 @@ def perlin_2d(shape, res, seed, fade=lambda t: 6*t**5 - 15*t**4 + 10*t**3):
     n11 = dot(tile_grads([1, None], [1, None]), [-1, -1])
     t = fade(grid[:shape[0], :shape[1]])
     return math.sqrt(2) * torch.lerp(torch.lerp(n00, n10, t[..., 0]), torch.lerp(n01, n11, t[..., 0]), t[..., 1])
+
+
+def perlin_2d_octaves(shape, res, seed, octaves=1, persistence=0.5, fade=lambda t: 6*t**5 - 15*t**4 + 10*t**3):
+    noise = torch.zeros(shape)
+    frequency = 1
+    amplitude = 1
+    for i in range(octaves):
+        noise += amplitude * perlin_2d(shape, (frequency * res[0], frequency * res[1]), seed + i, fade)
+        frequency *= 2
+        amplitude *= persistence
+    return noise

@@ -19,13 +19,15 @@ from threading import Thread
 
 from multiprocessing import Process, Queue, get_context
 
-from perlin import perlin_2d, rand_perlin_2d, rand_perlin_2d_octaves
+from perlin import perlin_2d, rand_perlin_2d, rand_perlin_2d_octaves, perlin_2d_octaves
 from scene_prompt import surreal_prompt_parts
 from scene_prompt import surreal_prompts
+from scene_prompt import regret_prompts
+
+from spout_util import send_spout_image, get_spout_image
 
 
 import fire
-import torchvision.transforms as transforms
 
 def image_generation_process(
     queue: Queue,
@@ -76,6 +78,7 @@ def image_generation_process(
 
     previous_output = None
     idx=0
+    last_time = time.time()
 
     while True:
         # try:
@@ -87,16 +90,20 @@ def image_generation_process(
 
         noise= noise_queue.get(block=True)
 
-        if int(time.time()) % 10 == 0:
+        if int(time.time()) % 5 == 0 and last_time != int(time.time()) and idx<len(regret_prompts)-1:
             # idx=int(time.time()) % len(surreal_prompt_parts) 
-            # idx=(idx+1)%len(surreal_prompt_parts)
-            # tmp_prompt= ", ".join(surreal_prompt_parts[:idx+1])
+            idx=min((idx+1), len(regret_prompts)-1)
+            tmp_prompt= ", ".join(regret_prompts[:idx+1])
 
-            idx=int(time.time()) % len(surreal_prompts)
-            tmp_prompt=surreal_prompts[idx]
-            x_output=stream.img2img(image=previous_output, prompt=tmp_prompt)
+            # idx=int(time.time()) % len(surreal_prompts)
+            # idx=(idx+1)%len(surreal_prompts)
+            # tmp_prompt=surreal_prompts[idx]
+
+            # last_frame=torch.clamp(previous_output, 0, 1)
+            x_output=stream.img2img(image=noise, prompt="a surreal landscape, "+tmp_prompt)
 
             print(f"update prompt: {tmp_prompt}")
+            last_time = int(time.time())
         else:
             x_output=stream.img2img(image=noise)
         
@@ -115,6 +122,8 @@ def image_generation_process(
         fps = 1 / elapsed_time if elapsed_time > 0 else float('inf')
         fps_queue.put(fps)
         
+        # x_output = (x_output + 1) / 2  # Scale from [-1, 1] to [0, 1]
+        # x_output = torch.clamp(x_output, 0, 1)
         previous_output = x_output
 
         # except KeyboardInterrupt:
@@ -128,9 +137,10 @@ def noise_generation(queue: Queue, width: int, height: int, batch_size: int = 1)
         # noise_images = torch.randn(batch_size, 3, height, width).uniform_(0,1)
         
         # perlin_images = rand_perlin_2d_octaves((height, width), (8, 8))
-        perlin_images=perlin_2d((height, width), (16, 16), time.time()*10)
+        perlin_images=perlin_2d_octaves((height, width), (2, 2), time.time()*5,4)
         perlin_images = torch.tensor(perlin_images).unsqueeze(0).repeat(batch_size, 3, 1, 1)
         # Normalize perlin_images to the range [0, 1]
+        perlin_images=(perlin_images+1)/2
         perlin_images = torch.clamp(perlin_images, 0, 1)
 
 
@@ -148,14 +158,16 @@ def main()-> None:
         fps_queue = Queue()
         noise_queue = Queue()
 
-        prompt = "A surreal landscapes"
+        # prompt = "A surreal landscapes"
+        prompt=regret_prompts[0]
         # model_id_or_path = "KBlueLeaf/kohaku-v2.1"
         model_id_or_path = "stabilityai/sd-turbo"
 
 
         # Start the noise generation process
         process_noise = ctx.Process(
-            target=noise_generation,
+            # target=noise_generation,
+            target=get_spout_image,
             args=(noise_queue, 512, 512),
         )
         process_noise.start()
@@ -169,21 +181,27 @@ def main()-> None:
 
 
 
-        process_show=ctx.Process(target=receive_images, args=(queue, fps_queue))
-        process_show.start()
+        # process_show=ctx.Process(target=receive_images, args=(queue, fps_queue))
+        # process_show.start()
+
+
+        process_spout=ctx.Process(target=send_spout_image, args=(queue, 512, 512))
+        process_spout.start()
 
 
         process_noise.join()
-        process_gen.join()        
-        process_show.join()
+        # process_gen.join()        
+        # process_show.join()
+        process_spout.join()
 
 
     except KeyboardInterrupt:
         print("Process interrupted")
         
-        process_gen.terminate()
-        process_show.terminate()
+        # process_gen.terminate()
+        # process_show.terminate()
         process_noise.terminate()
+        process_spout.terminate()
 
         return
 
