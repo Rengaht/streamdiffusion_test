@@ -90,30 +90,30 @@ def image_generation_process(
 
         noise= noise_queue.get(block=True)
 
-        if int(time.time()) % 5 == 0 and last_time != int(time.time()) and idx<len(regret_prompts)-1:
-            # idx=int(time.time()) % len(surreal_prompt_parts) 
-            idx=min((idx+1), len(regret_prompts)-1)
-            tmp_prompt= ", ".join(regret_prompts[:idx+1])
+        # if int(time.time()) % 5 == 0 and last_time != int(time.time()) and idx<len(regret_prompts)-1:
+        #     # idx=int(time.time()) % len(surreal_prompt_parts) 
+        #     # idx=min((idx+1), len(regret_prompts)-1)
+        #     # tmp_prompt= ", ".join(regret_prompts[:idx+1])
 
-            # idx=int(time.time()) % len(surreal_prompts)
-            # idx=(idx+1)%len(surreal_prompts)
-            # tmp_prompt=surreal_prompts[idx]
+        #     # idx=int(time.time()) % len(surreal_prompts)
+        #     idx=(idx+1)%len(surreal_prompts)
+        #     tmp_prompt=surreal_prompts[idx]
 
-            # last_frame=torch.clamp(previous_output, 0, 1)
-            x_output=stream.img2img(image=noise, prompt="a surreal landscape, "+tmp_prompt)
+        #     # last_frame=torch.clamp(previous_output, 0, 1)
+        #     x_output=stream.img2img(image=noise, prompt="a surreal landscape, "+tmp_prompt)
 
-            print(f"update prompt: {tmp_prompt}")
-            last_time = int(time.time())
-        else:
-            x_output=stream.img2img(image=noise)
+        #     print(f"update prompt: {tmp_prompt}")
+        #     last_time = int(time.time())
+        # else:
+        #     x_output=stream.img2img(image=noise)
         
-        # if isinstance(x_output, torch.Tensor) and x_output.dim() == 3:
-        #     x_output = x_output.permute(1, 2, 0)  # Convert from C x H x W to H x W x C
-        # x_tensor_output = transforms.ToTensor()(x_output)
+        # # if isinstance(x_output, torch.Tensor) and x_output.dim() == 3:
+        # #     x_output = x_output.permute(1, 2, 0)  # Convert from C x H x W to H x W x C
+        # # x_tensor_output = transforms.ToTensor()(x_output)
 
-        preprocessed_image =stream.preprocess_image(x_output)
+        # preprocessed_image =stream.preprocess_image(x_output)
        
-        queue.put(preprocessed_image, block=False)
+        queue.put(noise, block=False)
 
         # queue.put(preprocessed_image, block=False)
 
@@ -124,7 +124,7 @@ def image_generation_process(
         
         # x_output = (x_output + 1) / 2  # Scale from [-1, 1] to [0, 1]
         # x_output = torch.clamp(x_output, 0, 1)
-        previous_output = x_output
+        # previous_output = x_output
 
         # except KeyboardInterrupt:
         #     print(f"fps: {fps}")
@@ -190,7 +190,7 @@ def main()-> None:
 
 
         process_noise.join()
-        # process_gen.join()        
+        process_gen.join()        
         # process_show.join()
         process_spout.join()
 
@@ -198,7 +198,7 @@ def main()-> None:
     except KeyboardInterrupt:
         print("Process interrupted")
         
-        # process_gen.terminate()
+        process_gen.terminate()
         # process_show.terminate()
         process_noise.terminate()
         process_spout.terminate()

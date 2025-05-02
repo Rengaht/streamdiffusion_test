@@ -20,8 +20,8 @@ def spout_buffer_to_tensor(buffer, width, height):
 
     image_rgb = image_bgra[..., [2, 1, 0]]
     image_float = image_rgb.astype(np.float32) / 255.0
-    image_normalized = (image_float * 2.0) - 1.0
-    tensor = torch.from_numpy(image_normalized).permute(2, 0, 1)
+    # image_normalized = (image_float * 2.0) - 1.0
+    tensor = torch.from_numpy(image_float).permute(2, 0, 1)
 
     return tensor.unsqueeze(0)
 
@@ -34,19 +34,22 @@ def get_spout_image(queue, wwidth: int, wheight: int) -> None:
 
         while True:
             result = receiver.receiveImage(buffer, GL.GL_RGBA, False, 0)
+            # print("Receive result", result)
 
             if receiver.isUpdated():
                 width = receiver.getSenderWidth()
                 height = receiver.getSenderHeight()
                 buffer = array.array('B', [0] * (width * height * 4))  # Correctly reallocate buffer with updated size
+                print("Spout Receiver updated, Buffer size", width, height)
 
             if buffer and result and not SpoutGL.helpers.isBufferEmpty(buffer):
                 pixels=spout_buffer_to_tensor(buffer, width, height)
+                # print("get_spout_image", pixels.shape)
                 queue.put(pixels, block=False)
 
             # Wait until the next frame is ready
             # Wait time is in milliseconds; note that 0 will return immediately
-            receiver.waitFrameSync("SpoutSender", 10000)
+            # receiver.waitFrameSync("SpoutSender", 10000)
         
     
 
@@ -91,4 +94,4 @@ def send_spout_image(queue: Queue, width: int, height: int)->None:
                 sender.setFrameSync("StreamDiffusion")
                 
                 # Wait for next send attempt
-                time.sleep(1./TARGET_FPS)
+                # time.sleep(1./TARGET_FPS)
