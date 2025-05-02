@@ -20,6 +20,9 @@ from threading import Thread
 from multiprocessing import Process, Queue, get_context
 
 from perlin import perlin_2d, rand_perlin_2d, rand_perlin_2d_octaves
+from scene_prompt import surreal_prompt_parts
+from scene_prompt import surreal_prompts
+
 
 import fire
 import torchvision.transforms as transforms
@@ -72,30 +75,47 @@ def image_generation_process(
     #     stream()
 
     previous_output = None
-    
+    idx=0
 
     while True:
         # try:
         start_time = time.time()
         # x_output = stream(image=previous_output)
         # x_output=stream.stream.txt2img_sd_turbo(1).cpu()
+
+      
+
         noise= noise_queue.get(block=True)
-        x_output=stream.img2img(image=noise)
+
+        if int(time.time()) % 10 == 0:
+            # idx=int(time.time()) % len(surreal_prompt_parts) 
+            # idx=(idx+1)%len(surreal_prompt_parts)
+            # tmp_prompt= ", ".join(surreal_prompt_parts[:idx+1])
+
+            idx=int(time.time()) % len(surreal_prompts)
+            tmp_prompt=surreal_prompts[idx]
+            x_output=stream.img2img(image=previous_output, prompt=tmp_prompt)
+
+            print(f"update prompt: {tmp_prompt}")
+        else:
+            x_output=stream.img2img(image=noise)
         
         # if isinstance(x_output, torch.Tensor) and x_output.dim() == 3:
         #     x_output = x_output.permute(1, 2, 0)  # Convert from C x H x W to H x W x C
         # x_tensor_output = transforms.ToTensor()(x_output)
 
         preprocessed_image =stream.preprocess_image(x_output)
-
+       
         queue.put(preprocessed_image, block=False)
+
+        # queue.put(preprocessed_image, block=False)
 
         # Calculate FPS
         elapsed_time = time.time() - start_time
         fps = 1 / elapsed_time if elapsed_time > 0 else float('inf')
         fps_queue.put(fps)
         
-        # previous_output = x_output
+        previous_output = x_output
 
         # except KeyboardInterrupt:
         #     print(f"fps: {fps}")
@@ -108,8 +128,10 @@ def noise_generation(queue: Queue, width: int, height: int, batch_size: int = 1)
         # noise_images = torch.randn(batch_size, 3, height, width).uniform_(0,1)
         
         # perlin_images = rand_perlin_2d_octaves((height, width), (8, 8))
-        perlin_images=perlin_2d((height, width), (8, 8), time.time()*10)
+        perlin_images=perlin_2d((height, width), (16, 16), time.time()*10)
         perlin_images = torch.tensor(perlin_images).unsqueeze(0).repeat(batch_size, 3, 1, 1)
+        # Normalize perlin_images to the range [0, 1]
+        perlin_images = torch.clamp(perlin_images, 0, 1)
 
 
         queue.put(perlin_images, block=False)
@@ -126,7 +148,7 @@ def main()-> None:
         fps_queue = Queue()
         noise_queue = Queue()
 
-        prompt = "A surreal landscapes across different scene"
+        prompt = "A surreal landscapes"
         # model_id_or_path = "KBlueLeaf/kohaku-v2.1"
         model_id_or_path = "stabilityai/sd-turbo"
 
